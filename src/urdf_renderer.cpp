@@ -78,7 +78,7 @@ namespace realtime_urdf_filter
   void URDFRenderer::loadURDFModel
     (urdf::Model &model)
   {
-    typedef std::vector<boost::shared_ptr<urdf::Link> > V_Link;
+    typedef std::vector<urdf::LinkSharedPtr> V_Link;
     V_Link links;
     model.getLinks(links);
 
@@ -91,31 +91,31 @@ namespace realtime_urdf_filter
 
   ////////////////////////////////////////////////////////////////////////////////
   /** \brief Processes a single URDF link, creates renderable for it */
-  void URDFRenderer::process_link (boost::shared_ptr<urdf::Link> link)
+  void URDFRenderer::process_link (urdf::LinkSharedPtr link)
   {
     if (link->visual.get() == NULL || link->visual->geometry.get() == NULL)
       return;
 
-    boost::shared_ptr<Renderable> r;
+    std::shared_ptr<Renderable> r;
     if (link->visual->geometry->type == urdf::Geometry::BOX)
     {
-      boost::shared_ptr<urdf::Box> box = boost::dynamic_pointer_cast<urdf::Box> (link->visual->geometry);
+      urdf::BoxSharedPtr box = std::dynamic_pointer_cast<urdf::Box> (link->visual->geometry);
       r.reset (new RenderableBox (box->dim.x, box->dim.y, box->dim.z));
     }
     else if (link->visual->geometry->type == urdf::Geometry::CYLINDER)
     {
-      boost::shared_ptr<urdf::Cylinder> cylinder = boost::dynamic_pointer_cast<urdf::Cylinder> (link->visual->geometry);
+      urdf::CylinderSharedPtr cylinder = std::dynamic_pointer_cast<urdf::Cylinder> (link->visual->geometry);
       r.reset (new RenderableCylinder (cylinder->radius, cylinder->length));
     }
     else if (link->visual->geometry->type == urdf::Geometry::SPHERE)
     {
-      boost::shared_ptr<urdf::Sphere> sphere = boost::dynamic_pointer_cast<urdf::Sphere> (link->visual->geometry);
+      urdf::SphereSharedPtr sphere = std::dynamic_pointer_cast<urdf::Sphere> (link->visual->geometry);
       r.reset (new RenderableSphere (sphere->radius));
     }
     else if (link->visual->geometry->type == urdf::Geometry::MESH)
     {
-      boost::shared_ptr<urdf::Mesh> mesh = boost::dynamic_pointer_cast<urdf::Mesh> (link->visual->geometry);
-      std::string meshname (mesh->filename);
+      urdf::MeshSharedPtr mesh = std::dynamic_pointer_cast<urdf::Mesh> (link->visual->geometry);
+      std::string meshname (mesh->filename); // filename is internally maped to absolute path by ROS resource retriever
       RenderableMesh* rm = new RenderableMesh (meshname);
       rm->setScale (mesh->scale.x, mesh->scale.y, mesh->scale.z);
       r.reset (rm);
@@ -138,7 +138,7 @@ namespace realtime_urdf_filter
   {
     tf::StampedTransform t;
 
-    std::vector<boost::shared_ptr<Renderable> >::const_iterator it = renderables_.begin ();
+    std::vector<std::shared_ptr<Renderable> >::const_iterator it = renderables_.begin ();
     for (; it != renderables_.end (); it++)
     {
       try
@@ -159,7 +159,7 @@ namespace realtime_urdf_filter
   {
     update_link_transforms ();
       
-    std::vector<boost::shared_ptr<Renderable> >::const_iterator it = renderables_.begin ();
+    std::vector<std::shared_ptr<Renderable> >::const_iterator it = renderables_.begin ();
     for (; it != renderables_.end (); it++)
       (*it)->render ();
   }
