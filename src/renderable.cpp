@@ -265,6 +265,7 @@ namespace realtime_urdf_filter
       }   
       catch (resource_retriever::Exception& e)
       {   
+		  ROS_DEBUG_STREAM("Own exists failed"<<e.what());
         return false;
       }   
 
@@ -308,6 +309,7 @@ namespace realtime_urdf_filter
   {
     Assimp::Importer importer;
     importer.SetIOHandler(new ResourceIOSystem());
+
     const aiScene* scene = importer.ReadFile(meshname, aiProcess_PreTransformVertices|aiProcess_SortByPType|aiProcess_GenNormals|aiProcess_Triangulate|aiProcess_GenUVCoords|aiProcess_FlipUVs);
     if (!scene)
     {
@@ -371,15 +373,15 @@ namespace realtime_urdf_filter
     ROS_DEBUG_STREAM("Parsing mesh: "<<meshname_);
     aiMatrix4x4 transform = node->mTransformation;
     aiMatrix3x3 rotation(transform);
-
-    ROS_DEBUG_STREAM("  transform: "<<std::endl
-        <<std::fixed
-        <<"[ "<<*transform[0]<<" \t"<<*transform[1]<<" \t"<<*transform[2]<<" \t"<<*transform[3]<<std::endl
-        <<"  "<<*transform[4]<<" \t"<<*transform[5]<<" \t"<<*transform[6]<<" \t"<<*transform[7]<<std::endl
-        <<"  "<<*transform[8]<<" \t"<<*transform[9]<<" \t"<<*transform[10]<<" \t"<<*transform[11]<<std::endl
-        <<"  "<<*transform[12]<<" \t"<<*transform[13]<<" \t"<<*transform[14]<<" \t"<<*transform[15]<<std::endl);
+    
+	// TODO: fix, crashes app with Melodic and 18.04
+    //ROS_DEBUG_STREAM("  transform: "<<std::endl
+        //<<std::fixed
+        //<<"[ "<<*transform[0]<<" \t"<<*transform[1]<<" \t"<<*transform[2]<<" \t"<<*transform[3]<<std::endl
+        //<<"  "<<*transform[4]<<" \t"<<*transform[5]<<" \t"<<*transform[6]<<" \t"<<*transform[7]<<std::endl
+        //<<"  "<<*transform[8]<<" \t"<<*transform[9]<<" \t"<<*transform[10]<<" \t"<<*transform[11]<<std::endl
+        //<<"  "<<*transform[12]<<" \t"<<*transform[13]<<" \t"<<*transform[14]<<" \t"<<*transform[15]<<std::endl);
     aiNode *pnode = node->mParent;
-
 
     // Add the verticies
     for (unsigned int i = 0; i < mesh->mNumVertices; ++i)
@@ -402,13 +404,18 @@ namespace realtime_urdf_filter
     for (unsigned int i = 0 ; i < mesh->mNumFaces ; ++i)
     {
         const aiFace& face = mesh->mFaces[i];
-        assert(face.mNumIndices == 3);
-        indices.push_back(face.mIndices[0]);
-        indices.push_back(face.mIndices[1]);
-        indices.push_back(face.mIndices[2]);
+        //assert(face.mNumIndices == 3);
+        if(face.mNumIndices == 3) {
+			indices.push_back(face.mIndices[0]);
+			indices.push_back(face.mIndices[1]);
+			indices.push_back(face.mIndices[2]);
+		} else {
+			ROS_INFO("Melformed triangle");
+		}
     }
 
     meshes[index].init (vertices, indices);
+    ROS_DEBUG_STREAM("Mesh successfully parsed");
   }
 
   void RenderableMesh::setScale (float x, float y, float z)
