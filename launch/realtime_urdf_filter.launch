@@ -4,7 +4,7 @@
   <!-- Launch nodelet -->
   <node if="$(arg nodelet)" pkg="nodelet" type="nodelet" name="realtime_urtf_filter_nodelet" args="load realtime_urdf_filter/RealtimeURDFFilterNodelet camera_nodelet_manager" output="screen">
     <remap from="~input_depth" to="/panda/depth_camera/depth_image"/>
-    <remap from="~output_depth" to="/panda/depth_registered_filtered/depth_image" />
+    <remap from="~output_depth" to="/panda/depth_camera/depth_image/filtered" />
     <remap from="~output_mask" to="/urdf_filtered_mask" />
 
     <rosparam command="load" file="$(find realtime_urdf_filter)/launch/filter_parameters.yaml"/>
@@ -13,7 +13,7 @@
   <node unless="$(arg nodelet)" 
     pkg="realtime_urdf_filter" type="realtime_urdf_filter" name="$(anon realtime_urdf_filter)" output="screen">
     <remap from="~input_depth" to="/panda/depth_camera/depth_image"/>
-    <remap from="~output_depth" to="/panda/depth_registered_filtered/depth_image" />
+    <remap from="~output_depth" to="/panda/depth_camera/depth_image/filtered" />
     <remap from="~output_mask" to="/urdf_filtered_mask" />
 
     <rosparam command="load" file="$(find realtime_urdf_filter)/launch/filter_parameters.yaml"/>
@@ -21,6 +21,16 @@
 
   <!-- Load an example URDF -->
   <param name="robot_description" command="$(find xacro)/xacro '$(find franka_description)/robots/panda_arm_hand.urdf.xacro'"/>
+  
+  <!-- Produce Point Cloud -->
+  
+  <node pkg="nodelet" type="nodelet" args="manager" name="nodelet_manager" output="screen"/>
+  
+  <node pkg="nodelet" type="nodelet" name="cloudify" args="load depth_image_proc/point_cloud_xyz nodelet_manager">
+    <remap from="image_rect" to="panda/depth_camera/depth_image/filtered"/> <!-- image input -->
+    <remap from="points" to="panda/depth_camera/depth_image/filtered/points"/> <!-- pointcloud output -->
+    <remap from="camera_info" to="panda/depth_camera/depth/camera_info"/> <!-- camera info -->
+  </node>
 
 <!--
   <node name="robot_state_publisher_urdf_filter" pkg="robot_state_publisher" type="state_publisher">
