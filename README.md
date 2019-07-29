@@ -148,3 +148,7 @@ License
 The code is licensed under the BSD License, see the LICENSE file in the project
 root dir.
 
+Additions
+-------
+* Usable with Ubuntu 18.04 + ROS Melodic
+* Publishes Pointcloud of filtered image
