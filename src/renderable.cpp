@@ -80,7 +80,7 @@ namespace realtime_urdf_filter
   void RenderableSphere::render ()
   {
     applyTransform ();
-    glutSolidSphere(radius, 10, 10);
+    glutSolidSphere(radius+0.005, 10, 10);
     unapplyTransform ();
   }
 
