@@ -28,14 +28,16 @@ class Nanifier:
 	def callback(self, image, info, jstate):
 		# only process if moving slowly
 		if np.linalg.norm(np.asarray(jstate.velocity)[2:9]) > 1e-1:
-			print("!!!To fast!!! {} | {}".format(np.linalg.norm(jstate.velocity), np.asarray(jstate.velocity)[2:9]))
+			rospy.logdebug("!!!To fast!!! {} | {}".format(np.linalg.norm(jstate.velocity), np.asarray(jstate.velocity)[2:9]))
 			return
 			
 		cv_image = self.bridge.imgmsg_to_cv2(image, desired_encoding="passthrough").copy()
 		cv_image = cv2.resize(cv_image, (240, 180), interpolation=cv2.INTER_NEAREST)  # TODO: Define and use a central point where voxel size, max distance and viewfield are given as a rosparam and adapt along the image chain
-		mask = cv_image == self.value_to_replace # get robot pixels
+		mask = cv_image == self.value_to_replace # get robot pixels 
 		mask = binary_dilation(mask, structure=disk(10)) # grow regions of robot pixels
 		cv_image[mask] = np.nan # Replace extended robot pixels with nan
+		mask =  cv_image < 0.1 # remove close pixels where filter fails
+		cv_image[mask] = np.nan
 
 		try:
 			new_img = self.bridge.cv2_to_imgmsg(cv_image, image.encoding)
