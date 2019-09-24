@@ -13,19 +13,21 @@ from copy import deepcopy
 class Nanifier:
 	def __init__(self):
 		self.image_pub = rospy.Publisher("/panda/depth_camera/depth_image/filtered/image",Image, queue_size=10)
+		self.rgb_image_pub = rospy.Publisher("/panda/depth_camera/image/filtered/image",Image, queue_size=10)
 		self.info_pub = rospy.Publisher("/panda/depth_camera/depth_image/filtered/camera_info",CameraInfo, queue_size=10)
 		#self.info_pub = rospy.Publisher("/panda/totalyDifferentCameraInfo",CameraInfo, queue_size=10)
 		self.bridge = CvBridge()
 		self.image_sub = message_filters.Subscriber("/panda/depth_camera/depth_image/filtered", Image)
+		self.rgb_image_sub = message_filters.Subscriber("/panda/depth_camera/image", Image)
 		self.info_sub = message_filters.Subscriber("/panda/depth_camera/depth_image/camera_info", CameraInfo)
 		self.jstate_sub = message_filters.Subscriber("/joint_states", JointState)
 		self.value_to_replace = rospy.get_param('~filter_replace_value')
 		rospy.loginfo("Nanifier replacing {} with nan".format(self.value_to_replace))
-		self.ts = message_filters.ApproximateTimeSynchronizer([self.image_sub, self.info_sub, self.jstate_sub], 10, 0.1)
+		self.ts = message_filters.ApproximateTimeSynchronizer([self.image_sub, self.info_sub, self.jstate_sub, self.rgb_image_sub], 10, 0.1)
 		self.ts.registerCallback(self.callback)
 		rospy.loginfo("Nanifier init done")
 		
-	def callback(self, image, info, jstate):
+	def callback(self, image, info, jstate, rgb_image):
 		# only process if moving slowly
 		if np.linalg.norm(np.asarray(jstate.velocity)[2:9]) > 1e-1:
 			rospy.logdebug("!!!To fast!!! {} | {}".format(np.linalg.norm(jstate.velocity), np.asarray(jstate.velocity)[2:9]))
@@ -38,10 +40,15 @@ class Nanifier:
 		cv_image[mask] = np.nan # Replace extended robot pixels with nan
 		mask =  cv_image < 0.1 # remove close pixels where filter fails
 		cv_image[mask] = np.nan
+		
+		cv_rgb_image = self.bridge.imgmsg_to_cv2(rgb_image, desired_encoding="passthrough").copy()
+		cv_rgb_image = cv2.resize(cv_rgb_image, (240, 180), interpolation=cv2.INTER_NEAREST)
 
 		try:
 			new_img = self.bridge.cv2_to_imgmsg(cv_image, image.encoding)
 			new_img.header = image.header
+			new_rgb_img = self.bridge.cv2_to_imgmsg(cv_rgb_image, rgb_image.encoding)
+			new_rgb_img.header = rgb_image.header
 			new_info = deepcopy(info)
 			new_info.header = info.header
 			new_info.height = 180
@@ -59,6 +66,8 @@ class Nanifier:
 			
 			self.image_pub.publish(new_img)
 			rospy.logdebug("Image sent")
+			self.rgb_image_pub.publish(new_rgb_img)
+			rospy.logdebug("RGB Image sent")
 			self.info_pub.publish(new_info)
 			rospy.logdebug("Camera Info sent")
 		except CvBridgeError as e:
