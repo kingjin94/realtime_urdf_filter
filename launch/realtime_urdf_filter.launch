@@ -30,10 +30,11 @@
     <rosparam command="load" file="$(find realtime_urdf_filter)/launch/filter_parameters.yaml"/>
   </node>
   
-  <node pkg="nodelet" type="nodelet" name="cloudify" args="load depth_image_proc/point_cloud_xyz nodelet_manager">
-    <remap from="image_rect" to="panda/depth_camera/depth_image/filtered/image"/> <!-- image input -->
-    <remap from="points" to="panda/depth_camera/depth_image/filtered/points"/> <!-- pointcloud output -->
-    <remap from="camera_info" to="panda/depth_camera/depth_image/filtered/camera_info"/> <!-- camera info -->
+  <node pkg="nodelet" type="nodelet" name="cloudify" args="load depth_image_proc/point_cloud_xyzrgb nodelet_manager">
+    <remap from="depth_registered/image_rect" to="panda/depth_camera/depth_image/filtered/image"/> <!-- image input -->
+    <remap from="rgb/image_rect_color" to="panda/depth_camera/image/filtered/image"/> <!-- image input -->
+    <remap from="depth_registered/points" to="panda/depth_camera/depth_image/filtered/points"/> <!-- pointcloud output -->
+    <remap from="rgb/camera_info" to="panda/depth_camera/depth_image/filtered/camera_info"/> <!-- camera info -->
   </node>
 
 <!--
