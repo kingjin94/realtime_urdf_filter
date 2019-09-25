@@ -9,25 +9,53 @@ from scipy.ndimage.morphology import binary_dilation
 from skimage.morphology.selem import disk
 import message_filters
 from copy import deepcopy
+from mask_rcnn_ros.msg import Result
 
 class Nanifier:
 	def __init__(self):
 		self.image_pub = rospy.Publisher("/panda/depth_camera/depth_image/filtered/image",Image, queue_size=10)
-		self.rgb_image_pub = rospy.Publisher("/panda/depth_camera/image/filtered/image",Image, queue_size=10)
+		self.rgb_image_pub = rospy.Publisher("/panda/depth_camera/image/filtered/seg",Image, queue_size=10)
 		self.info_pub = rospy.Publisher("/panda/depth_camera/depth_image/filtered/camera_info",CameraInfo, queue_size=10)
 		#self.info_pub = rospy.Publisher("/panda/totalyDifferentCameraInfo",CameraInfo, queue_size=10)
 		self.bridge = CvBridge()
 		self.image_sub = message_filters.Subscriber("/panda/depth_camera/depth_image/filtered", Image)
-		self.rgb_image_sub = message_filters.Subscriber("/panda/depth_camera/image", Image)
+		self.seg_res_sub = message_filters.Subscriber("/panda/depth_camera/image/seg_res", Result)
 		self.info_sub = message_filters.Subscriber("/panda/depth_camera/depth_image/camera_info", CameraInfo)
 		self.jstate_sub = message_filters.Subscriber("/joint_states", JointState)
-		self.value_to_replace = rospy.get_param('~filter_replace_value')
+		self.value_to_replace = 50.0 #rospy.get_param('~filter_replace_value')
 		rospy.loginfo("Nanifier replacing {} with nan".format(self.value_to_replace))
-		self.ts = message_filters.ApproximateTimeSynchronizer([self.image_sub, self.info_sub, self.jstate_sub, self.rgb_image_sub], 10, 0.1)
+		self.ts = message_filters.ApproximateTimeSynchronizer([self.image_sub, self.info_sub, self.jstate_sub, self.seg_res_sub], 10, 1.0)
 		self.ts.registerCallback(self.callback)
 		rospy.loginfo("Nanifier init done")
 		
-	def callback(self, image, info, jstate, rgb_image):
+	def filter_seg_res(self, res_msg, classes, replaceValue):
+		"""
+		Finds all instances of the the classes given within res_msg, overlays their masks and returns an image containing all instances marked with replaceValue
+		
+		* res_msg: mask_rcnn_ros.msg.Result
+		* classes: list of strings
+		* replaceValue: greyscale / color code as numpy array; rest will default to black / 0
+		"""
+		indices_of_interest = [idx for idx, elem in enumerate(res_msg.class_names) if elem in classes]
+		if not indices_of_interest:
+			#print("No object of interest")
+			if len(res_msg.masks) > 0:
+				img_res = np.asarray((res_msg.masks[0].height, res_msg.masks[0].width))
+				return np.zeros(np.concatenate((img_res, replaceValue.shape)), dtype=replaceValue.dtype)
+			else:
+				return np.zeros((786, 1024, 3), dtype=replaceValue.dtype)
+		#print("Found {} objects of interest".format(len(indices_of_interest)))
+		res = np.zeros((res_msg.masks[indices_of_interest[0]].height, res_msg.masks[indices_of_interest[0]].width), dtype=bool)
+		
+		for idx in indices_of_interest:
+			seg_mask = self.bridge.imgmsg_to_cv2(res_msg.masks[idx], desired_encoding="passthrough").copy()
+			res=np.logical_or(res, seg_mask)
+			
+		ret_img = np.zeros(np.concatenate((res.shape, replaceValue.shape)), dtype=replaceValue.dtype)
+		ret_img[res,:] = replaceValue
+		return ret_img
+		
+	def callback(self, image, info, jstate, seg_res_msg):
 		# only process if moving slowly
 		if np.linalg.norm(np.asarray(jstate.velocity)[2:9]) > 1e-1:
 			rospy.logdebug("!!!To fast!!! {} | {}".format(np.linalg.norm(jstate.velocity), np.asarray(jstate.velocity)[2:9]))
@@ -41,14 +69,19 @@ class Nanifier:
 		mask =  cv_image < 0.1 # remove close pixels where filter fails
 		cv_image[mask] = np.nan
 		
-		cv_rgb_image = self.bridge.imgmsg_to_cv2(rgb_image, desired_encoding="passthrough").copy()
-		cv_rgb_image = cv2.resize(cv_rgb_image, (240, 180), interpolation=cv2.INTER_NEAREST)
-
+		# cv_rgb_image = self.bridge.imgmsg_to_cv2(rgb_image, desired_encoding="passthrough").copy()
+		# cv_rgb_image = cv2.resize(cv_rgb_image, (240, 180), interpolation=cv2.INTER_NEAREST)
+		cv_seg_image_cans = self.filter_seg_res(seg_res_msg, ["bottle", "cup"], np.asarray([255, 0, 0], dtype=np.uint8))
+		cv_seg_image_table = self.filter_seg_res(seg_res_msg, ["dining table"], np.asarray([0, 255, 0], dtype=np.uint8))
+		cv_seg_image = cv_seg_image_cans
+		cv_seg_image[cv_seg_image_cans[:,:,0]==0] = cv_seg_image_table[cv_seg_image_cans[:,:,0]==0] # Table is in the background # Be more clever --> bigger objects must be farther in the background?!
+		cv_seg_image = cv2.resize(cv_seg_image, (240, 180), interpolation=cv2.INTER_NEAREST)
+		
 		try:
-			new_img = self.bridge.cv2_to_imgmsg(cv_image, image.encoding)
-			new_img.header = image.header
-			new_rgb_img = self.bridge.cv2_to_imgmsg(cv_rgb_image, rgb_image.encoding)
-			new_rgb_img.header = rgb_image.header
+			new_depth_img_msg = self.bridge.cv2_to_imgmsg(cv_image, image.encoding)
+			new_depth_img_msg.header = image.header
+			new_seg_image_msg = self.bridge.cv2_to_imgmsg(cv_seg_image, "rgb8")
+			new_seg_image_msg.header = seg_res_msg.header
 			new_info = deepcopy(info)
 			new_info.header = info.header
 			new_info.height = 180
@@ -64,9 +97,9 @@ class Nanifier:
 			new_info.P[5] = new_info.P[5] * 240.0/1024
 			new_info.P[6] = new_info.P[6] * 240.0/1024
 			
-			self.image_pub.publish(new_img)
+			self.image_pub.publish(new_depth_img_msg)
 			rospy.logdebug("Image sent")
-			self.rgb_image_pub.publish(new_rgb_img)
+			self.rgb_image_pub.publish(new_seg_image_msg)
 			rospy.logdebug("RGB Image sent")
 			self.info_pub.publish(new_info)
 			rospy.logdebug("Camera Info sent")
