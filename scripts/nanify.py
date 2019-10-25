@@ -12,15 +12,16 @@ from copy import deepcopy
 from mask_rcnn_ros.msg import Result
 
 class Nanifier:
-	def __init__(self):
+	def __init__(self, depth_img_topic, depth_img_info, depth_scale):
+		self.depth_scale = float(depth_scale)
 		self.image_pub = rospy.Publisher("/panda/depth_camera/depth_image/filtered/image",Image, queue_size=10)
 		self.rgb_image_pub = rospy.Publisher("/panda/depth_camera/image/filtered/seg",Image, queue_size=10)
 		self.info_pub = rospy.Publisher("/panda/depth_camera/depth_image/filtered/camera_info",CameraInfo, queue_size=10)
 		#self.info_pub = rospy.Publisher("/panda/totalyDifferentCameraInfo",CameraInfo, queue_size=10)
 		self.bridge = CvBridge()
-		self.image_sub = message_filters.Subscriber("/panda/depth_camera/depth_image/filtered", Image)
+		self.image_sub = message_filters.Subscriber(depth_img_topic, Image) # old: "/panda/depth_camera/depth_image/filtered"
 		self.seg_res_sub = message_filters.Subscriber("/panda/depth_camera/image/seg_res", Result)
-		self.info_sub = message_filters.Subscriber("/panda/depth_camera/depth_image/camera_info", CameraInfo)
+		self.info_sub = message_filters.Subscriber(depth_img_info, CameraInfo) # old: "/panda/depth_camera/depth_image/camera_info"
 		self.jstate_sub = message_filters.Subscriber("/joint_states", JointState)
 		self.value_to_replace = 50.0 #rospy.get_param('~filter_replace_value')
 		rospy.loginfo("Nanifier replacing {} with nan".format(self.value_to_replace))
@@ -61,8 +62,8 @@ class Nanifier:
 			rospy.logdebug("!!!To fast!!! {} | {}".format(np.linalg.norm(jstate.velocity), np.asarray(jstate.velocity)[2:9]))
 			return
 			
-		cv_image = self.bridge.imgmsg_to_cv2(image, desired_encoding="passthrough").copy()
-		cv_image = cv2.resize(cv_image, (240, 180), interpolation=cv2.INTER_NEAREST)  # TODO: Define and use a central point where voxel size, max distance and viewfield are given as a rosparam and adapt along the image chain
+		cv_image = self.bridge.imgmsg_to_cv2(image, desired_encoding="32FC1").copy()
+		cv_image = self.depth_scale*cv2.resize(cv_image, (240, 180), interpolation=cv2.INTER_NEAREST)  # TODO: Define and use a central point where voxel size, max distance and viewfield are given as a rosparam and adapt along the image chain
 		mask = cv_image == self.value_to_replace # get robot pixels 
 		mask = binary_dilation(mask, structure=disk(10)) # grow regions of robot pixels
 		cv_image[mask] = np.nan # Replace extended robot pixels with nan
@@ -78,12 +79,15 @@ class Nanifier:
 		cv_seg_image = cv2.resize(cv_seg_image, (240, 180), interpolation=cv2.INTER_NEAREST)
 		
 		try:
-			new_depth_img_msg = self.bridge.cv2_to_imgmsg(cv_image, image.encoding)
+			new_depth_img_msg = self.bridge.cv2_to_imgmsg(cv_image, "32FC1")
 			new_depth_img_msg.header = image.header
+			new_depth_img_msg.header.frame_id = "panda/panda_camera"
 			new_seg_image_msg = self.bridge.cv2_to_imgmsg(cv_seg_image, "rgb8")
 			new_seg_image_msg.header = seg_res_msg.header
+			new_seg_image_msg.header.frame_id = "panda/panda_camera"
 			new_info = deepcopy(info)
 			new_info.header = info.header
+			new_info.header.frame_id = "panda/panda_camera"
 			new_info.height = 180
 			new_info.width = 240
 			new_info.K = np.asarray(new_info.K)
@@ -115,7 +119,11 @@ It also enlarges the robot regions a bit to remove artifacts and resizes the ima
 """
 def main(args):
 	rospy.init_node('nanify')
-	nanifier = Nanifier()
+	myargv = rospy.myargv(argv=sys.argv)
+	if len(myargv) != 4:
+		print("Usage: nanify depth_img depth_img_info depth_scale_to_m")
+		return -1
+	nanifier = Nanifier(myargv[1], myargv[2], myargv[3])
 
 	try:
 		rospy.spin()

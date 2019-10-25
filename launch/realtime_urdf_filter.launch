@@ -1,9 +1,13 @@
 <launch>
   <arg name="nodelet" default="false"/>
-
+  <arg name="depth_in" default="/panda/depth_camera/depth_image"/>
+  <arg name="depth_camera_info" default="/panda/depth_camera/depth_image/camera_info"/>
+  <arg name="color_in" default="/panda/depth_camera/image"/>
+  <arg name="depth_scale" default="1.0"/>
+  
   <!-- Launch nodelet -->
   <node if="$(arg nodelet)" pkg="nodelet" type="nodelet" name="realtime_urtf_filter_nodelet" args="load realtime_urdf_filter/RealtimeURDFFilterNodelet camera_nodelet_manager" output="screen">
-    <remap from="~input_depth" to="/panda/depth_camera/depth_image"/>
+    <remap from="~input_depth" to="$(arg depth_in)"/>
     <remap from="~output_depth" to="/panda/depth_camera/depth_image/filtered" />
     <remap from="~output_mask" to="/urdf_filtered_mask" />
 
@@ -12,7 +16,7 @@
 
   <node unless="$(arg nodelet)" 
     pkg="realtime_urdf_filter" type="realtime_urdf_filter" name="$(anon realtime_urdf_filter)" output="screen">
-    <remap from="~input_depth" to="/panda/depth_camera/depth_image"/>
+    <remap from="~input_depth" to="$(arg depth_in)"/>
     <remap from="~output_depth" to="/panda/depth_camera/depth_image/filtered" />
     <remap from="~output_mask" to="/urdf_filtered_mask" />
 
@@ -26,9 +30,11 @@
   
   <node pkg="nodelet" type="nodelet" args="manager" name="nodelet_manager" output="screen"/>
   
-  <include file="$(find mask_rcnn_ros)/examples/adapted.launch"/> <!-- start anti-self filter for camera image -->
+  <include file="$(find mask_rcnn_ros)/examples/adapted.launch"> <!-- start anti-self filter for camera image -->
+    <arg name="color_in" value="$(arg color_in)"/>
+  </include>
   
-  <node pkg="realtime_urdf_filter" name="nanifier" type="nanify.py" output="screen"> 
+  <node pkg="realtime_urdf_filter" name="nanifier" type="nanify.py" args="$(arg depth_in) $(arg depth_camera_info) $(arg depth_scale)" output="screen"> 
     <rosparam command="load" file="$(find realtime_urdf_filter)/launch/filter_parameters.yaml"/>
   </node>
   
@@ -36,7 +42,7 @@
     <remap from="depth_registered/image_rect" to="panda/depth_camera/depth_image/filtered/image"/> <!-- image input -->
     <remap from="rgb/image_rect_color" to="/panda/depth_camera/image/filtered/seg"/> <!-- image input -->
     <remap from="depth_registered/points" to="panda/depth_camera/depth_image/filtered/points"/> <!-- pointcloud output -->
-    <remap from="rgb/camera_info" to="panda/depth_camera/depth_image/filtered/camera_info"/> <!-- camera info -->
+    <remap from="rgb/camera_info" to="/panda/depth_camera/depth_image/filtered/camera_info"/> <!-- camera info -->
   </node>
 
 <!--
