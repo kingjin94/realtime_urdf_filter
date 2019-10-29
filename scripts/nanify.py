@@ -10,6 +10,7 @@ from skimage.morphology.selem import disk
 import message_filters
 from copy import deepcopy
 from mask_rcnn_ros.msg import Result
+import matplotlib.pyplot as plt
 
 class Nanifier:
 	def __init__(self, depth_img_topic, depth_img_info, depth_scale):
@@ -62,13 +63,15 @@ class Nanifier:
 			rospy.logdebug("!!!To fast!!! {} | {}".format(np.linalg.norm(jstate.velocity), np.asarray(jstate.velocity)[2:9]))
 			return
 			
-		cv_image = self.bridge.imgmsg_to_cv2(image, desired_encoding="32FC1").copy()
-		cv_image = self.depth_scale*cv2.resize(cv_image, (240, 180), interpolation=cv2.INTER_NEAREST)  # TODO: Define and use a central point where voxel size, max distance and viewfield are given as a rosparam and adapt along the image chain
-		mask = cv_image == self.value_to_replace # get robot pixels 
-		mask = binary_dilation(mask, structure=disk(10)) # grow regions of robot pixels
+		cv_image = self.depth_scale*self.bridge.imgmsg_to_cv2(image, desired_encoding="32FC1").copy()
+		old_shape = cv_image.shape
+		cv_image = cv2.resize(cv_image, (240, 180), interpolation=cv2.INTER_NEAREST)  # TODO: Define and use a central point where voxel size, max distance and viewfield are given as a rosparam and adapt along the image chain
+		mask = np.bitwise_or(np.bitwise_and(self.value_to_replace-0.1 < cv_image, cv_image < self.value_to_replace+0.1), (cv_image < 0.1)) # get robot and invalid pixels 
+		# mask = binary_dilation(mask, structure=disk(10)) # grow regions of robot pixels
+		mask = binary_dilation(mask, structure=disk(25)) # grow regions of robot pixels
 		cv_image[mask] = np.nan # Replace extended robot pixels with nan
-		mask =  cv_image < 0.1 # remove close pixels where filter fails
-		cv_image[mask] = np.nan
+		# mask =  cv_image < 0.1 # remove close pixels where filter fails
+		# cv_image[mask] = np.nan
 		
 		# cv_rgb_image = self.bridge.imgmsg_to_cv2(rgb_image, desired_encoding="passthrough").copy()
 		# cv_rgb_image = cv2.resize(cv_rgb_image, (240, 180), interpolation=cv2.INTER_NEAREST)
@@ -90,16 +93,17 @@ class Nanifier:
 			new_info.header.frame_id = "panda/panda_camera"
 			new_info.height = 180
 			new_info.width = 240
+			# print("Old image size: {}, new: {}".format(old_shape, cv_image.shape))
 			new_info.K = np.asarray(new_info.K)
-			new_info.K[0] = new_info.K[0] * 240.0/1024 # from https://answers.opencv.org/question/150551/how-does-resizing-an-image-affect-the-intrinsics/
-			new_info.K[4] = new_info.K[4] * 240.0/1024
-			new_info.K[2] = new_info.K[2] * 240.0/1024
-			new_info.K[5] = new_info.K[5] * 240.0/1024
+			new_info.K[0] = new_info.K[0] * 240.0/old_shape[1] # from https://answers.opencv.org/question/150551/how-does-resizing-an-image-affect-the-intrinsics/
+			new_info.K[4] = new_info.K[4] * 180.0/old_shape[0]
+			new_info.K[2] = new_info.K[2] * 240.0/old_shape[1]
+			new_info.K[5] = new_info.K[5] * 180.0/old_shape[0]
 			new_info.P = np.asarray(new_info.P)
-			new_info.P[0] = new_info.P[0] * 240.0/1024 
-			new_info.P[2] = new_info.P[2] * 240.0/1024
-			new_info.P[5] = new_info.P[5] * 240.0/1024
-			new_info.P[6] = new_info.P[6] * 240.0/1024
+			new_info.P[0] = new_info.P[0] * 240.0/old_shape[1] 
+			new_info.P[2] = new_info.P[2] * 240.0/old_shape[1]
+			new_info.P[5] = new_info.P[5] * 180.0/old_shape[0]
+			new_info.P[6] = new_info.P[6] * 180.0/old_shape[0]
 			
 			self.image_pub.publish(new_depth_img_msg)
 			rospy.logdebug("Image sent")
