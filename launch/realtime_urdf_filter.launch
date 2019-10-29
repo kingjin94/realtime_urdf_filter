@@ -34,7 +34,7 @@
     <arg name="color_in" value="$(arg color_in)"/>
   </include>
   
-  <node pkg="realtime_urdf_filter" name="nanifier" type="nanify.py" args="$(arg depth_in) $(arg depth_camera_info) $(arg depth_scale)" output="screen"> 
+  <node pkg="realtime_urdf_filter" name="nanifier" type="nanify.py" args="/panda/depth_camera/depth_image/filtered /panda/depth_camera/depth_image/camera_info $(arg depth_scale)" output="screen"> 
     <rosparam command="load" file="$(find realtime_urdf_filter)/launch/filter_parameters.yaml"/>
   </node>
   
