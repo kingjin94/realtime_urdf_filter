@@ -67,8 +67,8 @@ class Nanifier:
 		old_shape = cv_image.shape
 		cv_image = cv2.resize(cv_image, (240, 180), interpolation=cv2.INTER_NEAREST)  # TODO: Define and use a central point where voxel size, max distance and viewfield are given as a rosparam and adapt along the image chain
 		mask = np.bitwise_or(np.bitwise_and(self.value_to_replace-0.1 < cv_image, cv_image < self.value_to_replace+0.1), (cv_image < 0.1)) # get robot and invalid pixels 
-		# mask = binary_dilation(mask, structure=disk(10)) # grow regions of robot pixels
-		mask = binary_dilation(mask, structure=disk(25)) # grow regions of robot pixels
+		mask = binary_dilation(mask, structure=disk(10)) # grow regions of robot pixels
+		# mask = binary_dilation(mask, structure=disk(25)) # grow regions of robot pixels
 		cv_image[mask] = np.nan # Replace extended robot pixels with nan
 		# mask =  cv_image < 0.1 # remove close pixels where filter fails
 		# cv_image[mask] = np.nan
