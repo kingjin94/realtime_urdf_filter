@@ -150,5 +150,7 @@ root dir.
 
 Additions
 -------
+Adapted for usage in https://github.com/kingjin94/enhanced_simulation. Major additions are:
+
 * Usable with Ubuntu 18.04 + ROS Melodic
-* Publishes Pointcloud of filtered image
+* Publishes Pointcloud of filtered image with colors as labels received from Mask R-CNN
